@@ -1,0 +1,321 @@
+
+import React, { useState, useEffect } from 'react';
+import { analyzeVideoContent } from './services/geminiService';
+import { FileUpload } from './components/FileUpload';
+import { SmartPlayer } from './components/SmartPlayer';
+import { VeoAnimator } from './components/VeoAnimator';
+import { LiveConversation } from './components/LiveConversation';
+import { ImageAnalyzer } from './components/ImageAnalyzer';
+import { AnalysisResult, VideoState, TabOption, TimeSegment } from './types';
+import { Wand2, FileText, BarChart2, AlertCircle, Scissors, MonitorPlay, Film, AudioLines, Video, ScanEye } from 'lucide-react';
+
+const App: React.FC = () => {
+  const [currentView, setCurrentView] = useState<'EDITOR' | 'VEO' | 'LIVE' | 'IMAGE'>('EDITOR');
+  
+  const [videoState, setVideoState] = useState<VideoState>({
+    file: null,
+    url: null,
+    isProcessing: false,
+    analysis: null,
+    error: null,
+  });
+
+  const [activeTab, setActiveTab] = useState<TabOption>(TabOption.TRANSCRIPT);
+  const [smartSkipEnabled, setSmartSkipEnabled] = useState(true);
+  const [visualEnhancementEnabled, setVisualEnhancementEnabled] = useState(true);
+
+  // Cleanup object URL
+  useEffect(() => {
+    return () => {
+      if (videoState.url) {
+        URL.revokeObjectURL(videoState.url);
+      }
+    };
+  }, [videoState.url]);
+
+  const handleFileSelect = async (file: File) => {
+    const url = URL.createObjectURL(file);
+    setVideoState({
+      file,
+      url,
+      isProcessing: true,
+      analysis: null,
+      error: null
+    });
+
+    try {
+      const analysis = await analyzeVideoContent(file);
+      setVideoState(prev => ({
+        ...prev,
+        isProcessing: false,
+        analysis
+      }));
+    } catch (err: any) {
+      setVideoState(prev => ({
+        ...prev,
+        isProcessing: false,
+        error: err.message || "Failed to analyze video."
+      }));
+    }
+  };
+
+  const handleUpdateSegments = (newSegments: TimeSegment[]) => {
+    setVideoState(prev => {
+      if (!prev.analysis) return prev;
+      return {
+        ...prev,
+        analysis: {
+          ...prev.analysis,
+          activeSegments: newSegments
+        }
+      };
+    });
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0f172a] text-slate-200 selection:bg-blue-500/30 font-sans">
+      {/* Header */}
+      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('EDITOR')}>
+            <div className="w-8 h-8 bg-gradient-to-tr from-blue-500 to-emerald-400 rounded-lg flex items-center justify-center">
+              <Wand2 className="text-white w-5 h-5" />
+            </div>
+            <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+              SmartCut AI
+            </h1>
+          </div>
+          
+          {/* Main Navigation */}
+          <nav className="flex items-center bg-slate-800/50 p-1 rounded-lg border border-slate-700/50">
+             <button 
+                onClick={() => setCurrentView('EDITOR')}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    currentView === 'EDITOR' 
+                    ? 'bg-slate-700 text-white shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+             >
+                <Scissors className="w-4 h-4" /> Smart Editor
+             </button>
+             <button 
+                onClick={() => setCurrentView('VEO')}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    currentView === 'VEO' 
+                    ? 'bg-purple-500/20 text-purple-300 shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+             >
+                <Video className="w-4 h-4" /> Veo Studio
+             </button>
+             <button 
+                onClick={() => setCurrentView('LIVE')}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    currentView === 'LIVE' 
+                    ? 'bg-blue-500/20 text-blue-300 shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+             >
+                <AudioLines className="w-4 h-4" /> Live Chat
+             </button>
+             <button 
+                onClick={() => setCurrentView('IMAGE')}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    currentView === 'IMAGE' 
+                    ? 'bg-cyan-500/20 text-cyan-300 shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+             >
+                <ScanEye className="w-4 h-4" /> Image Vision
+             </button>
+          </nav>
+
+          <div className="w-24"></div> {/* Spacer to center nav roughly */}
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        
+        {currentView === 'LIVE' ? (
+          <LiveConversation />
+        ) : currentView === 'VEO' ? (
+            <VeoAnimator />
+        ) : currentView === 'IMAGE' ? (
+            <ImageAnalyzer />
+        ) : (
+            <>
+                {/* Upload State */}
+                {!videoState.file && (
+                  <div className="max-w-xl mx-auto mt-20">
+                     <div className="text-center mb-8 space-y-2">
+                       <h2 className="text-3xl font-bold text-white">Enhance Your Content</h2>
+                       <p className="text-slate-400">Remove silence and improve quality instantly using Gemini 2.5.</p>
+                     </div>
+                     <FileUpload 
+                       onFileSelect={handleFileSelect} 
+                       isProcessing={videoState.isProcessing} 
+                     />
+                  </div>
+                )}
+
+                {/* Processing State */}
+                {videoState.isProcessing && (
+                  <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+                     <div className="relative w-24 h-24 mb-6">
+                        <div className="absolute inset-0 border-t-4 border-blue-500 rounded-full animate-spin"></div>
+                        <div className="absolute inset-2 border-t-4 border-emerald-500 rounded-full animate-spin animation-delay-150"></div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                           <Wand2 className="w-8 h-8 text-white animate-pulse" />
+                        </div>
+                     </div>
+                     <h3 className="text-xl font-semibold text-white">Analyzing Content</h3>
+                     <p className="text-slate-400 mt-2">Detecting silence and enhancing audio script...</p>
+                  </div>
+                )}
+
+                {/* Editor View */}
+                {videoState.url && !videoState.isProcessing && (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-8rem)]">
+                    
+                    {/* Left Col: Player */}
+                    <div className="lg:col-span-8 flex flex-col gap-4 h-full">
+                      <div className="flex-grow min-h-0">
+                        <SmartPlayer 
+                          src={videoState.url}
+                          activeSegments={videoState.analysis?.activeSegments || []}
+                          smartSkipEnabled={smartSkipEnabled}
+                          onToggleSmartSkip={setSmartSkipEnabled}
+                          visualEnhancementEnabled={visualEnhancementEnabled}
+                          onToggleVisualEnhancement={setVisualEnhancementEnabled}
+                          onUpdateSegments={handleUpdateSegments}
+                        />
+                      </div>
+                      
+                      {/* Stats Bar */}
+                      {videoState.analysis && (
+                        <div className="grid grid-cols-3 gap-4">
+                           <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                              <div className="text-xs text-slate-500 uppercase font-semibold mb-1">Silence Removed</div>
+                              <div className="text-xl font-bold text-emerald-400">
+                                 {videoState.analysis.activeSegments.length > 0 
+                                   ? "Active" 
+                                   : "Calculating"}
+                              </div>
+                           </div>
+                           <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                              <div className="text-xs text-slate-500 uppercase font-semibold mb-1">Sentiment</div>
+                              <div className="text-xl font-bold text-blue-400">
+                                 {videoState.analysis.sentiment}
+                              </div>
+                           </div>
+                           <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                              <div className="text-xs text-slate-500 uppercase font-semibold mb-1">Quality</div>
+                              <div className="text-xl font-bold text-purple-400">Enhanced</div>
+                           </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right Col: Transcript & Tools */}
+                    <div className="lg:col-span-4 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden h-full">
+                      <div className="flex border-b border-slate-800">
+                        <button
+                          onClick={() => setActiveTab(TabOption.TRANSCRIPT)}
+                          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
+                            activeTab === TabOption.TRANSCRIPT 
+                              ? 'bg-slate-800 text-white border-b-2 border-blue-500' 
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                          }`}
+                        >
+                          <FileText className="w-4 h-4" /> Transcript
+                        </button>
+                        <button
+                          onClick={() => setActiveTab(TabOption.STATS)}
+                          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
+                            activeTab === TabOption.STATS 
+                              ? 'bg-slate-800 text-white border-b-2 border-blue-500' 
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                          }`}
+                        >
+                          <BarChart2 className="w-4 h-4" /> AI Summary
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+                        {videoState.error ? (
+                           <div className="text-red-400 flex items-center gap-2 p-4 bg-red-900/20 rounded-lg">
+                              <AlertCircle className="w-5 h-5" />
+                              {videoState.error}
+                           </div>
+                        ) : !videoState.analysis ? (
+                           <div className="text-slate-500 text-center mt-10">Analysis pending...</div>
+                        ) : (
+                          <>
+                            {activeTab === TabOption.TRANSCRIPT && (
+                              <div className="space-y-6">
+                                <div className="space-y-2">
+                                   <h3 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+                                     <Wand2 className="w-3 h-3" /> Enhanced Transcript
+                                   </h3>
+                                   <p className="text-slate-300 leading-relaxed text-sm whitespace-pre-wrap">
+                                     {videoState.analysis.enhancedTranscript}
+                                   </p>
+                                </div>
+                                
+                                <div className="h-px bg-slate-800" />
+                                
+                                <div className="space-y-2 opacity-60 hover:opacity-100 transition-opacity">
+                                   <h3 className="text-sm font-semibold text-slate-400">Original Audio</h3>
+                                   <p className="text-slate-400 leading-relaxed text-sm italic">
+                                     "{videoState.analysis.originalTranscript}"
+                                   </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {activeTab === TabOption.STATS && (
+                              <div className="space-y-6">
+                                 <div className="bg-slate-800/50 p-4 rounded-lg">
+                                    <h4 className="text-sm font-semibold text-white mb-2">Summary</h4>
+                                    <p className="text-sm text-slate-300 leading-relaxed">
+                                       {videoState.analysis.summary}
+                                    </p>
+                                 </div>
+
+                                 <div>
+                                    <h4 className="text-sm font-semibold text-white mb-3">Detected Segments</h4>
+                                    <div className="space-y-2">
+                                       {videoState.analysis.activeSegments.map((seg, idx) => (
+                                          <div key={idx} className="flex items-center justify-between p-2 bg-slate-800/30 rounded border border-slate-700/50 text-xs">
+                                             <span className="text-slate-400">Segment {idx + 1}</span>
+                                             <span className="font-mono text-blue-400">
+                                                {formatTime(seg.start)} - {formatTime(seg.end)}
+                                             </span>
+                                          </div>
+                                       ))}
+                                    </div>
+                                 </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+            </>
+        )}
+      </main>
+    </div>
+  );
+};
+
+// Re-export specific icons that might be missing in older Lucide versions or just in case
+// Usually standard imports are fine, but keeping this pattern as safe fallback if desired
+export default App;

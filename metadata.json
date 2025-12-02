@@ -1,0 +1,7 @@
+{
+  "name": "SmartCut AI Studio",
+  "description": "An intelligent video editor that uses Gemini 2.5 Flash to automatically detect and skip silent pauses in speech and enhances video visuals using CSS filters.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
