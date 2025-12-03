@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { AnalysisResult, ImageAnalysisResult } from "../types";
 
 const API_KEY = process.env.API_KEY || '';
@@ -97,6 +97,28 @@ export const analyzeVideoContent = async (file: File): Promise<AnalysisResult> =
   }
 };
 
+export const transcribeAudio = async (file: File): Promise<string> => {
+  try {
+    const audioPart = await fileToGenerativePart(file);
+    const dynamicAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const response = await dynamicAi.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: {
+        parts: [
+            audioPart,
+            { text: "Transcribe the spoken audio in this file verbatim. Return only the transcript text." }
+        ]
+      }
+    });
+
+    return response.text || "No transcript generated.";
+  } catch (error) {
+    console.error("Error transcribing audio:", error);
+    throw error;
+  }
+};
+
 export const analyzeImage = async (file: File): Promise<ImageAnalysisResult> => {
   try {
     const imagePart = await fileToGenerativePart(file);
@@ -133,6 +155,92 @@ export const analyzeImage = async (file: File): Promise<ImageAnalysisResult> => 
     return JSON.parse(text) as ImageAnalysisResult;
   } catch (error) {
     console.error("Error analyzing image:", error);
+    throw error;
+  }
+};
+
+export const replaceBackground = async (foregroundFile: File, backgroundFile: File): Promise<string> => {
+    try {
+        const foregroundPart = await fileToGenerativePart(foregroundFile);
+        const backgroundPart = await fileToGenerativePart(backgroundFile);
+        const dynamicAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+        const response = await dynamicAi.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+                parts: [
+                    foregroundPart.inlineData ? { inlineData: foregroundPart.inlineData } : { text: '' },
+                    backgroundPart.inlineData ? { inlineData: backgroundPart.inlineData } : { text: '' },
+                    { text: "Extract the main subject from the first image and composite it seamlessly onto the second image (the background). Maintain the scale and perspective of the subject to fit the new background naturally. Output only the final image." }
+                ]
+            }
+        });
+
+        // Find the image part in the response
+        if (response.candidates && response.candidates[0].content.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData) {
+                    const base64EncodeString = part.inlineData.data;
+                    return `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
+                }
+            }
+        }
+        
+        throw new Error("No image generated.");
+
+    } catch (error) {
+        console.error("Error replacing background:", error);
+        throw error;
+    }
+};
+
+export const analyzeSlides = async (file: File): Promise<string> => {
+  try {
+    const filePart = await fileToGenerativePart(file);
+    const dynamicAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const response = await dynamicAi.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: {
+        parts: [
+          filePart,
+          { text: "You are a professional speaker. Analyze these slides and write a confident, engaging, and concise presentation speech (script) that a speaker would say while presenting these slides. Do not include stage directions, just the spoken text." }
+        ]
+      }
+    });
+    
+    return response.text || "Could not generate script.";
+  } catch (error) {
+    console.error("Error analyzing slides:", error);
+    throw error;
+  }
+};
+
+export const generateSpeech = async (text: string, voiceName: string = 'Kore'): Promise<string> => {
+  try {
+    const dynamicAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const response = await dynamicAi.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: {
+        parts: [{ text: text }]
+      },
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voiceName },
+          },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error("No audio data returned");
+
+    return base64Audio; 
+  } catch (error) {
+    console.error("Error generating speech:", error);
     throw error;
   }
 };
